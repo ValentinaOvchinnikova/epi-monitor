@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Эпидемиологический монитор</title>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
+
+<style>
+  :root {
+    --bg:#f5f7fa; --card:#fff; --border:#e2e6ea; --text:#1a1a1a;
+    --muted:#6b7280; --primary:#2563eb; --danger:#dc2626; --success:#16a34a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; font-family: Arial, sans-serif;
+    background: var(--bg); color: var(--text); }
+  header { background:#fff; border-bottom:1px solid var(--border);
+    padding:14px 20px; position:sticky; top:0; z-index:10; }
+  header h1 { margin:0 0 8px 0; font-size:20px; }
+  .row-info { display:flex; gap:16px; align-items:center; flex-wrap:wrap;
+    font-size:13px; color:var(--muted); }
+  .row-info input { padding:4px 8px; font-size:13px; width:220px; }
+  .row-info button { font-size:12px; padding:5px 10px;
+    border:1px solid var(--border); border-radius:6px;
+    background:#fff; cursor:pointer; }
+  .row-info .status { padding:3px 10px; border-radius:12px; font-weight:bold; }
+  .row-info .ok { background:#dcfce7; color:#166534; }
+  .row-info .err { background:#fee2e2; color:#991b1b; }
+  .tabs { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  .tabs button { border:1px solid var(--border); background:#fff;
+    padding:8px 16px; border-radius:8px; cursor:pointer; font-size:14px; }
+  .tabs button.active { background:var(--primary); color:#fff;
+    border-color:var(--primary); }
+  main { padding:20px; max-width:1400px; margin:0 auto; }
+  section.tab { display:none; } section.tab.active { display:block; }
+  .card { background:var(--card); border:1px solid var(--border);
+    border-radius:12px; padding:20px; margin-bottom:20px;
+    box-shadow:0 1px 4px rgba(0,0,0,0.04); }
+  .card h2 { margin:0 0 16px 0; font-size:17px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+    gap:14px; }
+  label { display:block; font-size:13px; color:var(--muted); margin-bottom:4px; }
+  input, select { width:100%; padding:8px 10px; border:1px solid var(--border);
+    border-radius:6px; font-size:14px; background:#fff; color:var(--text); }
+  input:focus, select:focus { outline:2px solid var(--primary); outline-offset:1px; }
+  .radio-row { display:flex; gap:16px; align-items:center; margin-top:6px;
+    flex-wrap:wrap; }
+  .radio-row label { margin:0; font-size:14px; color:var(--text);
+    display:flex; align-items:center; gap:6px; width:auto; }
+  .radio-row input { width:auto; }
+  button.primary { background:var(--primary); color:#fff; border:none;
+    padding:10px 20px; border-radius:8px; cursor:pointer;
+    font-size:14px; font-weight:bold; }
+  button.primary:hover { opacity:0.9; }
+  button.primary:disabled { opacity:0.5; cursor:not-allowed; }
+  button.secondary { background:#fff; color:var(--text);
+    border:1px solid var(--border); padding:8px 14px;
+    border-radius:8px; cursor:pointer; font-size:13px; }
+  button.danger { background:#fff; color:var(--danger);
+    border:1px solid var(--danger); padding:8px 14px;
+    border-radius:8px; cursor:pointer; font-size:13px; }
+  button.icon { padding:4px 8px; font-size:12px; }
+  .error { color:var(--danger); font-size:12px; margin-top:4px; }
+  .hint-text { color:var(--muted); font-size:12px; margin-top:4px; }
+  table.data { width:100%; border-collapse:collapse; font-size:14px; }
+  table.data th, table.data td { padding:8px 12px;
+    border-bottom:1px solid var(--border); text-align:left; }
+  table.data th { background:#f0f4fa; font-weight:600; }
+  table.data tr:hover td { background:#f8fafc; }
+  .chart-wrap { position:relative; height:520px; margin-bottom:8px; }
+  .chart-wrap.small { height:260px; }
+  .colors-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+    gap:12px; }
+  .color-cell { display:flex; align-items:center; gap:8px;
+    padding:8px; background:#f8fafc; border-radius:8px;
+    border:1px solid var(--border); }
+  .color-cell input[type=color] { width:40px; height:32px;
+    padding:0; border:none; background:none; cursor:pointer; }
+  .color-cell span { font-size:13px; flex:1; }
+  .toast { position:fixed; bottom:24px; right:24px; background:#1a1a1a;
+    color:#fff; padding:12px 18px; border-radius:8px; font-size:14px;
+    opacity:0; transition:opacity 0.3s; pointer-events:none; z-index:100; }
+  .toast.show { opacity:1; }
+  .toast.error { background:var(--danger); }
+  .toast.success { background:var(--success); }
+  .setup-block { background:#fff7ed; border:1px solid #fed7aa;
+    padding:20px; border-radius:12px; margin-bottom:20px; }
+  .setup-block h2 { margin-top:0; color:#9a3412; }
+  .setup-block p { font-size:14px; line-height:1.6; }
+  .setup-block code { background:#fee2e2; padding:1px 6px; border-radius:4px;
+    font-family: Consolas, monospace; font-size:13px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Эпидемиологический монитор — охват вакцинацией и заболеваемость</h1>
+  <div class="row-info">
+    <span>Пользователь:</span>
+    <input id="userName" placeholder="ваше имя">
+    <span id="serverStatus" class="status">не подключено</span>
+    <button id="btnSetup">Настроить хранилище</button>
+  </div>
+  <div class="tabs">
+    <button data-tab="input" class="active">Ввод данных</button>
+    <button data-tab="chart">Графики</button>
+    <button data-tab="settings">Настройки</button>
+  </div>
+</header>
+
+<main>
+
+<!-- Блок настройки при первом запуске -->
+<div id="setupBlock" class="setup-block">
+  <h2>Первый запуск — настройка хранилища</h2>
+  <p>
+    Данные будут сохраняться в <b>ваш приватный репозиторий на GitHub</b>.
+    Их не увидят ни посетители сайта, ни поисковики. Заполните поля и сохраните —
+    больше этот блок не появится.
+  </p>
+  <div class="grid">
+    <div>
+      <label for="ghUser">Ваш логин на GitHub</label>
+      <input id="ghUser" placeholder="например: ivanov">
+    </div>
+    <div>
+      <label for="ghRepo">Имя приватного репозитория для данных</label>
+      <input id="ghRepo" placeholder="например: epi-data">
+    </div>
+    <div>
+      <label for="ghToken">Токен доступа (Personal Access Token)</label>
+      <input id="ghToken" type="password" placeholder="ghp_...">
+      <div class="hint-text">
+        Создать: github.com/settings/tokens → Generate new token (classic) →
+        галочка <code>repo</code> → срок 1 год → скопировать.
+      </div>
+    </div>
+  </div>
+  <div style="margin-top:14px;">
+    <button class="primary" id="btnSaveSetup">Проверить и сохранить</button>
+    <button class="secondary" id="btnSkipSetup" style="margin-left:8px;">
+      Работать без сохранения (только этот браузер)
+    </button>
+  </div>
+  <div id="setupErr" class="error"></div>
+</div>
+
+<!-- ===== ВКЛАДКА ВВОДА ===== -->
+<section id="tab-input" class="tab active">
+
+  <div class="card">
+    <h2>Добавить запись</h2>
+    <form id="recordForm">
+      <div class="grid">
+        <div>
+          <label for="nosology">Нозология</label>
+          <select id="nosology" required></select>
+        </div>
+        <div>
+          <label for="ageGroup">Декретированный возраст</label>
+          <input id="ageGroup" list="ageGroupsList"
+                 placeholder="например: 12 месяцев" required>
+          <datalist id="ageGroupsList"></datalist>
+          <div class="hint-text">Можно ввести любой свой вариант</div>
+        </div>
+        <div>
+          <label for="year">Год</label>
+          <input id="year" type="number" min="1900" max="2100"
+                 step="1" required>
+        </div>
+      </div>
+
+      <div style="margin-top:16px;">
+        <label>Охват вакцинацией, %</label>
+        <div class="radio-row">
+          <label><input type="radio" name="covMode" value="direct" checked>
+            Ввести готовый %</label>
+          <label><input type="radio" name="covMode" value="calc">
+            Рассчитать из чисел</label>
+        </div>
+        <div id="covDirect" style="margin-top:10px;">
+          <input id="coverageDirect" type="number" min="0" max="100"
+                 step="0.01" placeholder="например: 96.75">
+        </div>
+        <div id="covCalc" style="margin-top:10px; display:none;">
+          <div class="grid">
+            <div>
+              <label for="vaccinated">Вакцинировано (чел.)</label>
+              <input id="vaccinated" type="number" min="0" step="1">
+            </div>
+            <div>
+              <label for="eligible">Подлежало вакцинации (чел.)</label>
+              <input id="eligible" type="number" min="0" step="1">
+            </div>
+            <div>
+              <label>Результат, %</label>
+              <input id="covCalcResult" type="text" readonly
+                     style="background:#f0f4fa; font-weight:bold;">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid" style="margin-top:16px;">
+        <div>
+          <label for="morbidity">Заболеваемость, на 100 тыс. населения</label>
+          <input id="morbidity" type="number" min="0" step="0.01" required>
+          <div class="hint-text">Не больше 2 знаков после запятой</div>
+        </div>
+      </div>
+
+      <div id="formError" class="error"></div>
+
+      <div style="margin-top:18px;">
+        <button type="submit" class="primary" id="btnSave">Сохранить</button>
+        <button type="reset" class="secondary" style="margin-left:8px;">
+          Очистить форму</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Записи (<span id="recordCount">0</span>)</h2>
+    <div style="overflow-x:auto;">
+      <table class="data" id="recordsTable">
+        <thead><tr>
+          <th>Нозология</th><th>Возраст</th><th>Год</th>
+          <th>Охват, %</th><th>Вакц.</th><th>Подлежало</th>
+          <th>Заболеваемость</th><th>Кто внёс</th><th>Когда</th><th></th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+</section>
+
+<!-- ===== ВКЛАДКА ГРАФИКОВ ===== -->
+<section id="tab-chart" class="tab">
+
+  <div class="card">
+    <h2>Параметры отображения</h2>
+    <div class="grid">
+      <div>
+        <label for="chartNosology">Нозология</label>
+        <select id="chartNosology"></select>
+      </div>
+      <div>
+        <label for="barRadius">Форма столбцов</label>
+        <select id="barRadius">
+          <option value="0">Квадратные</option>
+          <option value="4">Слегка скруглённые</option>
+          <option value="10">Скруглённые</option>
+          <option value="20">Сильно скруглённые</option>
+        </select>
+      </div>
+      <div>
+        <label for="lineColor">Цвет линии заболеваемости</label>
+        <input type="color" id="lineColor" value="#dc2626">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Охват (столбцы) и заболеваемость (линия)</h2>
+    <div class="chart-wrap"><canvas id="mainChart"></canvas></div>
+    <div class="hint-text">
+      Наведите на точку — покажет охват по каждому возрасту и
+      заболеваемость за год. Колесо мыши — зум, двойной клик — сброс.
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Заболеваемость отдельно</h2>
+    <div class="chart-wrap small"><canvas id="morbChart"></canvas></div>
+  </div>
+
+  <div class="card">
+    <h2>Цвета возрастных групп</h2>
+    <div class="colors-row" id="ageColorsRow"></div>
+  </div>
+
+  <div class="card">
+    <h2>Таблица данных</h2>
+    <div style="overflow-x:auto;"><table class="data" id="chartTable"></table></div>
+  </div>
+
+</section>
+
+<!-- ===== ВКЛАДКА НАСТРОЕК ===== -->
+<section id="tab-settings" class="tab">
+  <div class="card">
+    <h2>Хранилище</h2>
+    <p style="font-size:14px; line-height:1.6;">
+      Если вы настроили GitHub — данные лежат в приватном репозитории
+      <b id="repoInfo">—</b>. Их видят только те, у кого есть токен.
+      Если не настроили — данные хранятся только в этом браузере.
+    </p>
+    <div style="margin-top:14px;">
+      <button class="secondary" id="btnReload">Обновить данные</button>
+      <button class="secondary" id="btnExport" style="margin-left:8px;">
+        Экспорт JSON</button>
+      <button class="secondary" id="btnImport" style="margin-left:8px;">
+        Импорт JSON</button>
+      <input type="file" id="fileInput" accept=".json" style="display:none;">
+      <button class="danger" id="btnResetSetup" style="margin-left:8px;">
+        Сбросить настройки хранилища</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Список нозологий</h2>
+    <div id="nosologyList" style="font-size:14px; line-height:1.8;"></div>
+  </div>
+</section>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+   Эпидемиологический монитор
+   Данные: приватный GitHub-репозиторий (файл data.json).
+   Без настроек GitHub — localStorage текущего браузера.
+   ============================================================ */
+
+const NOSOLOGIES = [
+  'Туберкулёз','Гемофильная инфекция','Пневмококковая инфекция',
+  'Коклюш','Дифтерия','Столбняк','Гепатит В','Полиомиелит',
+  'Корь','Краснуха','Эпидемический паротит','Грипп'
+];
+
+const PALETTE = ['#2563eb','#0891b2','#059669','#65a30d',
+  '#ca8a04','#ea580c','#dc2626','#db2777',
+  '#7c3aed','#4f46e5','#0d9488','#a16207'];
+
+const $  = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+
+const LS = {
+  user:  'epi_user',
+  setup: 'epi_gh_setup',      // { user, repo, token }
+  local: 'epi_local_data'     // запасное хранилище
+};
+
+/* ---------- Состояние ---------- */
+let ghSetup = null;           // { user, repo, token } или null
+let records = [];
+let settings = {
+  lineColor: '#dc2626',
+  barRadius: 0,
+  ageGroupColors: {},
+  chartNosology: NOSOLOGIES[0]
+};
+let mainChart = null, morbChart = null;
+let dataSha = null;           // sha файла data.json для обновления
+
+/* ---------- Утилиты ---------- */
+function toast(msg, type='') {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  setTimeout(() => t.className = 'toast ' + type, 2500);
+}
+function round2(n) { return Math.round(n * 100) / 100; }
+function isValidTwoDecimals(v) {
+  if (v === '' || v == null) return false;
+  const s = String(v).replace(',', '.');
+  return /^\d+(\.\d{1,2})?$/.test(s);
+}
+function ensureAgeColor(ag) {
+  if (!settings.ageGroupColors[ag]) {
+    const idx = Object.keys(settings.ageGroupColors).length % PALETTE.length;
+    settings.ageGroupColors[ag] = PALETTE[idx];
+  }
+  return settings.ageGroupColors[ag];
+}
+
+/* ============================================================
+   ХРАНИЛИЩЕ — GitHub API или localStorage
+   ============================================================ */
+
+function loadSetup() {
+  try {
+    const raw = localStorage.getItem(LS.setup);
+    ghSetup = raw ? JSON.parse(raw) : null;
+  } catch { ghSetup = null; }
+}
+
+function saveSetup(s) {
+  if (s) localStorage.setItem(LS.setup, JSON.stringify(s));
+  else localStorage.removeItem(LS.setup);
+  ghSetup = s;
+}
+
+async function ghGet() {
+  const url = `https://api.github.com/repos/${ghSetup.user}/${ghSetup.repo}/contents/data.json`;
+  const r = await fetch(url, {
+    headers: {
+      'Authorization': 'token ' + ghSetup.token,
+      'Accept': 'application/vnd.github+json'
+    }
+  });
+  if (r.status === 404) return { data: null, sha: null };
+  if (!r.ok) {
+    if (r.status === 401) throw new Error('Токен недействителен (401)');
+    if (r.status === 403) throw new Error('Нет доступа. Проверьте права токена (403)');
+    throw new Error('GitHub ответил ' + r.status);
+  }
+  const j = await r.json();
+  // содержимое в base64
+  const text = decodeURIComponent(escape(atob(j.content.replace(/\n/g, ''))));
+  return { data: JSON.parse(text), sha: j.sha };
+}
+
+async function ghPut(data, sha, message) {
+  const url = `https://api.github.com/repos/${ghSetup.user}/${ghSetup.repo}/contents/data.json`;
+  const body = {
+    message: message || 'update data',
+    content: btoa(unescape(encodeURIComponent(JSON.stringify(data, null, 2)))),
+    branch: 'main'
+  };
+  if (sha) body.sha = sha;
+  const r = await fetch(url, {
+    method: 'PUT',
+    headers: {
+      'Authorization': 'token ' + ghSetup.token,
+      'Accept': 'application/vnd.github+json',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) {
+    const err = await r.text();
+    throw new Error('Не удалось сохранить: ' + r.status + ' ' + err);
+  }
+  return r.json();
+}
+
+/* ---------- Абстракция хранилища ---------- */
+async function loadAll() {
+  if (ghSetup) {
+    const { data, sha } = await ghGet();
+    dataSha = sha;
+    if (data && data.records) {
+      records = data.records;
+      settings = Object.assign(settings, data.settings || {});
+    } else {
+      // файла ещё нет — создаём пустой при первом сохранении
+      records = [];
+    }
+  } else {
+    // localStorage
+    try {
+      const raw = localStorage.getItem(LS.local);
+      if (raw) {
+        const d = JSON.parse(raw);
+        records = d.records || [];
+        settings = Object.assign(settings, d.settings || {});
+      }
+    } catch {}
+  }
+}
+
+async function saveAll() {
+  const payload = { records, settings, updated_at: new Date().toISOString() };
+  if (ghSetup) {
+    const res = await ghPut(payload, dataSha, 'update: ' +
+      new Date().toISOString().slice(0,19));
+    dataSha = res.content.sha;
+  } else {
+    localStorage.setItem(LS.local, JSON.stringify(payload));
+  }
+}
+
+/* ============================================================
+   НАСТРОЙКА ХРАНИЛИЩА (первый экран)
+   ============================================================ */
+
+function showSetupIfNeeded() {
+  if (ghSetup) {
+    $('#setupBlock').style.display = 'none';
+    $('#serverStatus').textContent = 'GitHub подключён';
+    $('#serverStatus').className = 'status ok';
+    $('#repoInfo').textContent = ghSetup.user + '/' + ghSetup.repo;
+  } else {
+    // показать блок, но статус — «локальный режим»
+    $('#serverStatus').textContent = 'локальный режим';
+    $('#serverStatus').className = 'status err';
+    $('#repoInfo').textContent = 'не настроен (данные только в этом браузере)';
+  }
+}
+
+$('#btnSaveSetup').addEventListener('click', async () => {
+  const user  = $('#ghUser').value.trim();
+  const repo  = $('#ghRepo').value.trim();
+  const token = $('#ghToken').value.trim();
+  $('#setupErr').textContent = '';
+
+  if (!user || !repo || !token) {
+    $('#setupErr').textContent = 'Заполните все три поля';
+    return;
+  }
+  const candidate = { user, repo, token };
+  const prev = ghSetup;
+  ghSetup = candidate;
+  try {
+    const { data, sha } = await ghGet();
+    dataSha = sha;
+    if (data && data.records) {
+      records = data.records;
+      settings = Object.assign(settings, data.settings || {});
+    } else {
+      records = [];
+    }
+    saveSetup(candidate);
+    toast('Хранилище подключено', 'success');
+    $('#setupBlock').style.display = 'none';
+    showSetupIfNeeded();
+    await refreshAll();
+  } catch (e) {
+    ghSetup = prev;
+    $('#setupErr').textContent = e.message;
+    toast('Ошибка подключения: ' + e.message, 'error');
+  }
+});
+
+$('#btnSkipSetup').addEventListener('click', () => {
+  saveSetup(null);
+  $('#setupBlock').style.display = 'none';
+  showSetupIfNeeded();
+  refreshAll();
+});
+
+$('#btnSetup').addEventListener('click', () => {
+  $('#setupBlock').style.display = '';
+  if (ghSetup) {
+    $('#ghUser').value = ghSetup.user;
+    $('#ghRepo').value = ghSetup.repo;
+    $('#ghToken').value = ghSetup.token;
+  }
+});
+
+$('#btnResetSetup').addEventListener('click', () => {
+  if (!confirm('Сбросить настройки хранилища? Данные на GitHub останутся, но приложение перестанет с ними работать.')) return;
+  saveSetup(null);
+  showSetupIfNeeded();
+});
+
+/* ============================================================
+   Вкладки
+   ============================================================ */
+$$('.tabs button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $$('.tabs button').forEach(b => b.classList.remove('active'));
+    $$('.tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    $('#tab-' + btn.dataset.tab).classList.add('active');
+    if (btn.dataset.tab === 'chart') rebuildCharts();
+  });
+});
+
+/* ============================================================
+   Заполнение селектов
+   ============================================================ */
+function populateNosologySelects() {
+  const s1 = $('#nosology'), s2 = $('#chartNosology');
+  s1.innerHTML = ''; s2.innerHTML = '';
+  NOSOLOGIES.forEach(n => {
+    s1.appendChild(new Option(n, n));
+    s2.appendChild(new Option(n, n));
+  });
+  s2.value = settings.chartNosology || NOSOLOGIES[0];
+}
+function populateAgeGroupsDatalist() {
+  const dl = $('#ageGroupsList'); dl.innerHTML = '';
+  [...new Set(records.map(r => r.age_group))].forEach(a =>
+    dl.appendChild(new Option(a, a)));
+}
+
+/* ---------- Ввод охвата ---------- */
+$$('input[name="covMode"]').forEach(r => {
+  r.addEventListener('change', e => {
+    const mode = e.target.value;
+    $('#covDirect').style.display = mode === 'direct' ? '' : 'none';
+    $('#covCalc').style.display   = mode === 'calc'   ? '' : 'none';
+    updateCalc();
+  });
+});
+function updateCalc() {
+  const v = parseFloat($('#vaccinated').value);
+  const e = parseFloat($('#eligible').value);
+  $('#covCalcResult').value =
+    (!isNaN(v) && !isNaN(e) && e > 0) ? (round2(v/e*100)).toFixed(2) + ' %' : '';
+}
+$('#vaccinated').addEventListener('input', updateCalc);
+$('#eligible').addEventListener('input', updateCalc);
+
+/* ---------- Сохранение записи ---------- */
+$('#recordForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  $('#formError').textContent = '';
+  $('#btnSave').disabled = true;
+
+  try {
+    const nosology = $('#nosology').value;
+    const ageGroup = $('#ageGroup').value.trim();
+    const year     = parseInt($('#year').value, 10);
+    const mode     = document.querySelector('input[name="covMode"]:checked').value;
+
+    if (!ageGroup) return showErr('Укажите возраст');
+    if (!year || year < 1900 || year > 2100) return showErr('Год 1900–2100');
+
+    let coverage = null, vaccinated = null, eligible = null;
+
+    if (mode === 'direct') {
+      const raw = $('#coverageDirect').value;
+      if (!isValidTwoDecimals(raw)) return showErr('Охват: до 2 знаков после запятой');
+      coverage = parseFloat(raw);
+      if (coverage < 0 || coverage > 100) return showErr('Охват 0–100 %');
+    } else {
+      const v = $('#vaccinated').value, e2 = $('#eligible').value;
+      if (!v || !e2) return showErr('Заполните вакцинировано и подлежало');
+      vaccinated = parseInt(v, 10);
+      eligible   = parseInt(e2, 10);
+      if (vaccinated < 0 || eligible <= 0) return showErr('Проверьте числа');
+      if (vaccinated > eligible) return showErr('Вакцинировано больше подлежащих');
+      coverage = round2(vaccinated / eligible * 100);
+    }
+
+    const morbRaw = $('#morbidity').value;
+    if (!isValidTwoDecimals(morbRaw)) return showErr('Заболеваемость: до 2 знаков');
+    const morbidity = parseFloat(morbRaw);
+
+    records.push({
+      id: Date.now() + '_' + Math.random().toString(36).slice(2,6),
+      nosology, age_group: ageGroup, year,
+      coverage, vaccinated, eligible, morbidity,
+      created_by: ($('#userName').value || '').trim(),
+      created_at: new Date().toISOString()
+    });
+    ensureAgeColor(ageGroup);
+
+    await saveAll();
+    toast('Запись сохранена', 'success');
+    $('#recordForm').reset();
+    $('#covCalcResult').value = '';
+    await refreshAll();
+  } catch (err) {
+    showErr('Ошибка сохранения: ' + err.message);
+  } finally {
+    $('#btnSave').disabled = false;
+  }
+});
+
+function showErr(msg) {
+  $('#formError').textContent = msg;
+  toast(msg, 'error');
+}
+
+/* ---------- Таблица записей ---------- */
+function renderRecordsTable() {
+  const tb = $('#recordsTable tbody');
+  tb.innerHTML = '';
+  $('#recordCount').textContent = records.length;
+
+  records
+    .slice()
+    .sort((a,b) => a.nosology.localeCompare(b.nosology) || a.year - b.year)
+    .forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${r.nosology}</td>
+        <td>${r.age_group}</td>
+        <td>${r.year}</td>
+        <td>${Number(r.coverage).toFixed(2)}</td>
+        <td>${r.vaccinated ?? '—'}</td>
+        <td>${r.eligible ?? '—'}</td>
+        <td>${Number(r.morbidity).toFixed(2)}</td>
+        <td>${r.created_by || '—'}</td>
+        <td>${(r.created_at || '').replace('T',' ').slice(0,16)}</td>
+        <td><button class="secondary icon" data-del="${r.id}">Удалить</button></td>`;
+      tb.appendChild(tr);
+    });
+
+  tb.querySelectorAll('[data-del]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Удалить запись?')) return;
+      records = records.filter(x => x.id !== btn.dataset.del);
+      try {
+        await saveAll();
+        toast('Удалено');
+        refreshAll();
+      } catch (e) { toast('Ошибка удаления: ' + e.message, 'error'); }
+    });
+  });
+}
+
+/* ============================================================
+   Графики
+   ============================================================ */
+function collectForChart(nosology) {
+  const byYear = new Map();
+  const ageSet = new Set();
+  records.filter(r => r.nosology === nosology).forEach(r => {
+    if (!byYear.has(r.year)) byYear.set(r.year, { cov:{}, morb:[] });
+    const s = byYear.get(r.year);
+    s.cov[r.age_group] = Number(r.coverage);
+    s.morb.push(Number(r.morbidity));
+    ageSet.add(r.age_group);
+  });
+  const years = [...byYear.keys()].sort((a,b) => a - b);
+  const ages  = [...ageSet];
+  const covSeries = ages.map(ag => ({
+    ageGroup: ag,
+    data: years.map(y => byYear.get(y).cov[ag] ?? null)
+  }));
+  const morbData = years.map(y => {
+    const a = byYear.get(y).morb;
+    return a.length ? round2(a.reduce((x,y)=>x+y,0)/a.length) : null;
+  });
+  return { years, ages, covSeries, morbData };
+}
+
+function rebuildCharts() {
+  settings.chartNosology = $('#chartNosology').value;
+  settings.barRadius = parseInt($('#barRadius').value, 10);
+  settings.lineColor = $('#lineColor').value;
+
+  const { years, ages, covSeries, morbData } =
+    collectForChart(settings.chartNosology);
+
+  const barColors = ages.map(ag => ensureAgeColor(ag));
+
+  if (mainChart) mainChart.destroy();
+  const ctx = $('#mainChart').getContext('2d');
+
+  if (!years.length) {
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    mainChart = null; if (morbChart) { morbChart.destroy(); morbChart = null; }
+    $('#ageColorsRow').innerHTML = '<p class="hint-text">Нет данных.</p>';
+    $('#chartTable').innerHTML = '';
+    return;
+  }
+
+  const barDatasets = covSeries.map((s, i) => ({
+    type: 'bar', label: s.ageGroup, data: s.data,
+    backgroundColor: barColors[i], borderColor: barColors[i],
+    borderWidth: 1, borderRadius: settings.barRadius,
+    yAxisID: 'yCov', order: 2
+  }));
+
+  const lineDataset = {
+    type: 'line', label: 'Заболеваемость', data: morbData,
+    borderColor: settings.lineColor, backgroundColor: settings.lineColor,
+    borderWidth: 3, pointRadius: 6, pointHoverRadius: 9,
+    pointBackgroundColor: settings.lineColor,
+    pointBorderColor: '#fff', pointBorderWidth: 2,
+    tension: 0.25, fill: false, yAxisID: 'yMorb', order: 1
+  };
+
+  mainChart = new Chart(ctx, {
+    data: { labels: years, datasets: [...barDatasets, lineDataset] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        title: {
+          display: true,
+          text: settings.chartNosology + ' — охват и заболеваемость',
+          font: { size: 17, weight: 'bold' },
+          padding: { top: 4, bottom: 14 }
+        },
+        legend: { position: 'top',
+          labels: { font: { size: 14 }, boxWidth: 18, padding: 12 } },
+        tooltip: {
+          titleFont: { size: 14 }, bodyFont: { size: 13 }, padding: 10,
+          callbacks: {
+            label: c => c.dataset.type === 'line'
+              ? ' ' + c.dataset.label + ': ' + (c.parsed.y ?? '—') + ' на 100 тыс.'
+              : ' ' + c.dataset.label + ': ' + (c.parsed.y ?? '—') + ' %'
+          }
+        },
+        datalabels: {
+          display: c => c.parsed.y !== null,
+          align: c => c.dataset.type === 'line' ? 'top' : 'end',
+          anchor: 'end', offset: 4,
+          font: { size: 11, weight: 'bold' },
+          formatter: v => v === null ? '' : Number(v).toFixed(2),
+          color: c => c.dataset.type === 'line'
+            ? settings.lineColor
+            : (c.dataset.backgroundColor || '#333')
+        },
+        zoom: {
+          pan: { enabled: true, mode: 'x' },
+          zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
+        }
+      },
+      scales: {
+        x: { title: { display: true, text: 'Год',
+              font: { size: 14, weight: 'bold' } },
+             ticks: { font: { size: 13 } },
+             grid: { color: 'rgba(0,0,0,0.05)' } },
+        yMorb: { type: 'linear', position: 'left', beginAtZero: true,
+          title: { display: true,
+            text: 'Заболеваемость на 100 тыс. населения',
+            font: { size: 13, weight: 'bold' } },
+          ticks: { font: { size: 12 } },
+          grid: { color: 'rgba(0,0,0,0.08)' } },
+        yCov: { type: 'linear', position: 'right', min: 0, max: 100,
+          title: { display: true, text: 'Охват вакцинацией, %',
+            font: { size: 13, weight: 'bold' } },
+          ticks: { font: { size: 12 } },
+          grid: { drawOnChartArea: false } }
+      }
+    }
+  });
+
+  if (morbChart) morbChart.destroy();
+  morbChart = new Chart($('#morbChart').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: years,
+      datasets: [{
+        label: 'Заболеваемость', data: morbData,
+        borderColor: settings.lineColor,
+        backgroundColor: settings.lineColor + '33',
+        borderWidth: 3, pointRadius: 6, pointHoverRadius: 9,
+        pointBackgroundColor: settings.lineColor,
+        pointBorderColor: '#fff', pointBorderWidth: 2,
+        tension: 0.25, fill: true
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        title: { display: true,
+          text: 'Заболеваемость — ' + settings.chartNosology,
+          font: { size: 15, weight: 'bold' } },
+        legend: { display: false },
+        tooltip: { callbacks: {
+          label: c => ' ' + c.parsed.y + ' на 100 тыс.' } },
+        datalabels: {
+          align: 'top', anchor: 'end', offset: 6,
+          font: { size: 12, weight: 'bold' },
+          color: settings.lineColor,
+          formatter: v => v === null ? '' : Number(v).toFixed(2)
+        }
+      },
+      scales: {
+        x: { title: { display: true, text: 'Год' } },
+        y: { beginAtZero: true,
+             title: { display: true, text: 'На 100 тыс. населения' } }
+      }
+    }
+  });
+
+  renderAgeColors(ages);
+  renderChartTable(years, ages, covSeries, morbData);
+}
+
+function renderAgeColors(ages) {
+  const row = $('#ageColorsRow'); row.innerHTML = '';
+  if (!ages.length) { row.innerHTML = '<p class="hint-text">Нет данных.</p>'; return; }
+  ages.forEach(ag => {
+    const c = document.createElement('div');
+    c.className = 'color-cell';
+    const color = ensureAgeColor(ag);
+    c.innerHTML = `<input type="color" value="${color}"><span>${ag}</span>`;
+    c.querySelector('input').addEventListener('input', async e => {
+      settings.ageGroupColors[ag] = e.target.value;
+      try { await saveAll(); } catch(err) { toast('Не сохранилось: '+err.message,'error'); }
+      rebuildCharts();
+    });
+    row.appendChild(c);
+  });
+}
+
+function renderChartTable(years, ages, covSeries, morbData) {
+  const tbl = $('#chartTable');
+  if (!years.length) { tbl.innerHTML = ''; return; }
+  let html = '<thead><tr><th>Показатель</th>';
+  years.forEach(y => html += `<th>${y}</th>`);
+  html += '</tr></thead><tbody>';
+  ages.forEach((ag, i) => {
+    html += `<tr><td>${ag} — охват, %</td>`;
+    covSeries[i].data.forEach(v =>
+      html += `<td>${v === null ? '—' : Number(v).toFixed(2)}</td>`);
+    html += '</tr>';
+  });
+  html += '<tr><td><b>Заболеваемость</b></td>';
+  morbData.forEach(v =>
+    html += `<td><b>${v === null ? '—' : Number(v).toFixed(2)}</b></td>`);
+  html += '</tr></tbody>';
+  tbl.innerHTML = html;
+}
+
+/* ---------- Параметры графика ---------- */
+$('#chartNosology').addEventListener('change', async () => {
+  settings.chartNosology = $('#chartNosology').value;
+  try { await saveAll(); } catch(e) {}
+  rebuildCharts();
+});
+$('#barRadius').addEventListener('change', rebuildCharts);
+$('#lineColor').addEventListener('input', rebuildCharts);
+
+/* ============================================================
+   Настройки
+   ============================================================ */
+$('#btnReload').addEventListener('click', async () => {
+  try {
+    await loadAll();
+    await refreshAll();
+    toast('Данные обновлены', 'success');
+  } catch (e) { toast('Ошибка: ' + e.message, 'error'); }
+});
+
+$('#btnExport').addEventListener('click', () => {
+  const data = JSON.stringify({ records, settings }, null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'epi_data_' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  toast('Файл сохранён', 'success');
+});
+
+$('#btnImport').addEventListener('click', () => $('#fileInput').click());
+
+$('#fileInput').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async ev => {
+    try {
+      const data = JSON.parse(ev.target.result);
+      if (!Array.isArray(data.records)) throw new Error('Неверный формат');
+      if (!confirm('Заменить текущие данные импортированными?')) return;
+      records = data.records;
+      settings = Object.assign(settings, data.settings || {});
+      await saveAll();
+      await refreshAll();
+      toast('Импортировано', 'success');
+    } catch (err) {
+      toast('Ошибка импорта: ' + err.message, 'error');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+/* ============================================================
+   Инициализация
+   ============================================================ */
+function renderNosologyList() {
+  $('#nosologyList').innerHTML = NOSOLOGIES.map(n => '• ' + n).join('<br>');
+}
+
+$('#userName').value = localStorage.getItem(LS.user) || '';
+$('#userName').addEventListener('input', e => {
+  localStorage.setItem(LS.user, e.target.value);
+});
+
+async function refreshAll() {
+  populateNosologySelects();
+  populateAgeGroupsDatalist();
+  renderRecordsTable();
+  $('#barRadius').value = String(settings.barRadius ?? 0);
+  $('#lineColor').value = settings.lineColor || '#dc2626';
+  $('#chartNosology').value = settings.chartNosology || NOSOLOGIES[0];
+  rebuildCharts();
+}
+
+Chart.register(ChartDataLabels);
+Chart.register(ChartZoom);
+
+(async () => {
+  loadSetup();
+  showSetupIfNeeded();
+  if (ghSetup) {
+    try {
+      await loadAll();
+    } catch (e) {
+      toast('Не удалось загрузить данные: ' + e.message, 'error');
+    }
+  }
+  renderNosologyList();
+  await refreshAll();
+})();
+</script>
+
+</body>
+</html>
